@@ -1,6 +1,7 @@
 package vn.hung.com.hotel.parceltracking;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationContext;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -17,9 +18,9 @@ import vn.hung.com.hotel.parceltracking.repository.ParcelRepository;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -34,6 +35,9 @@ public class ParcelServiceImplTest {
     @Mock
     private GuestService guestService;
 
+    @Mock
+    private ApplicationContext applicationContext;
+
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
@@ -42,22 +46,26 @@ public class ParcelServiceImplTest {
     @Test
     void testAcceptParcel_Success() {
         ParcelDto parcelDto = new ParcelDto();
-        parcelDto.setTrackingNumber("12345");
         parcelDto.setGuestId(1L);
+        parcelDto.setTrackingNumber("12345");
 
         Guest guest = new Guest();
         guest.setId(1L);
 
-        Parcel parcel = new Parcel();
-        BeanUtils.copyProperties(parcelDto, parcel);
+        Parcel savedParcel = new Parcel();
+        savedParcel.setId(1L);
+        savedParcel.setTrackingNumber("12345");
 
         when(guestService.getCheckedInGuest(1L)).thenReturn(guest);
-        when(parcelRepository.save(any(Parcel.class))).thenReturn(parcel);
+        when(parcelRepository.save(any(Parcel.class))).thenReturn(savedParcel);
 
         Response response = parcelService.acceptParcel(parcelDto);
 
-        Parcel savedParcel = (Parcel) response.getData();
-        assertEquals("12345", savedParcel.getTrackingNumber());
+        assertNotNull(response);
+        assertNotNull(response.getData());
+        assertEquals(1L, ((Parcel) response.getData()).getId());
+        assertEquals("12345", ((Parcel) response.getData()).getTrackingNumber());
+
         verify(guestService, times(1)).getCheckedInGuest(1L);
         verify(parcelRepository, times(1)).save(any(Parcel.class));
     }
@@ -68,19 +76,22 @@ public class ParcelServiceImplTest {
         parcelDto.setGuestId(1L);
 
         when(guestService.getCheckedInGuest(1L)).thenReturn(null);
+        when(applicationContext.getMessage("guest.not-found", null, Locale.getDefault()))
+                .thenReturn("Guest not found");
 
         ValidationException exception = assertThrows(ValidationException.class, () -> {
             parcelService.acceptParcel(parcelDto);
         });
 
-        assertEquals("Guest not found or not checked in", exception.getMessage());
+        assertEquals("Guest not found", exception.getMessage());
         verify(guestService, times(1)).getCheckedInGuest(1L);
         verify(parcelRepository, never()).save(any(Parcel.class));
     }
 
     @Test
-    void testGetParcelsForGuest() {
+    void testGetParcelsForGuest_Success() {
         Long guestId = 1L;
+
         Parcel parcel1 = new Parcel();
         parcel1.setId(1L);
         parcel1.setTrackingNumber("12345");
@@ -95,10 +106,13 @@ public class ParcelServiceImplTest {
 
         Response response = parcelService.getParcelsForGuest(guestId);
 
+        assertNotNull(response);
+        assertNotNull(response.getData());
         List<Parcel> result = (List<Parcel>) response.getData();
         assertEquals(2, result.size());
         assertEquals("12345", result.get(0).getTrackingNumber());
         assertEquals("67890", result.get(1).getTrackingNumber());
+
         verify(parcelRepository, times(1)).findByGuestId(guestId);
     }
 }
